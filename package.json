@@ -1,0 +1,23 @@
+{
+  "name": "forex-bot",
+  "version": "1.0.0",
+  "description": "Telegram forex group bot with webhook mode and MongoDB persistence",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "dotenv": "latest",
+    "express": "latest",
+    "mongodb": "latest",
+    "node-telegram-bot-api": "latest"
+  },
+  "devDependencies": {
+    "nodemon": "latest"
+  }
+}
