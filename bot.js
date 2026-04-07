@@ -32,6 +32,7 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 let statsManager;
 let liveTracker;
+let dbReady = false;
 
 function isGroupChat(msg) {
   return msg && msg.chat && ['group', 'supergroup'].includes(msg.chat.type);
@@ -103,17 +104,20 @@ async function handleSignalMessage(msg, isEdit = false) {
     reply_to_message_id: msg.message_id
   });
 
-  await liveTracker.saveOpenTrade(
-    String(msg.chat.id),
-    String(msg.message_id),
-    owner.userId,
-    owner.username,
-    signal
-  );
+  if (dbReady && liveTracker) {
+    await liveTracker.saveOpenTrade(
+      String(msg.chat.id),
+      String(msg.message_id),
+      owner.userId,
+      owner.username,
+      signal
+    );
+  }
 }
 
 async function handlePnlResult(msg) {
   if (!msg.text || !isGroupChat(msg)) return false;
+  if (!dbReady || !statsManager) return false;
 
   const parsed = parsePnlMessage(msg.text);
   if (!parsed.isResult) return false;
@@ -147,6 +151,12 @@ async function handlePnlResult(msg) {
 }
 
 async function handleMyStats(msg) {
+  if (!dbReady || !statsManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
   const chatId = String(msg.chat.id);
   const me = normalizeUser(msg.from);
   const stats = await statsManager.getUserStats(chatId, me.userId);
@@ -155,6 +165,12 @@ async function handleMyStats(msg) {
 }
 
 async function handleStats(msg) {
+  if (!dbReady || !statsManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
   const chatId = String(msg.chat.id);
   const mention = extractMention(msg.text);
 
@@ -171,6 +187,12 @@ async function handleStats(msg) {
 }
 
 async function handleLeaderboard(msg) {
+  if (!dbReady || !statsManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
   const chatId = String(msg.chat.id);
   const period = parseLeaderboardPeriod(msg.text);
   const rows = await statsManager.getLeaderboard(chatId, period.key);
@@ -179,6 +201,12 @@ async function handleLeaderboard(msg) {
 }
 
 async function handleCancelTrade(msg) {
+  if (!dbReady || !statsManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
   const chatId = String(msg.chat.id);
   const sender = normalizeUser(msg.from);
   const mention = extractMention(msg.text);
@@ -221,6 +249,12 @@ async function handleCancelTrade(msg) {
 }
 
 async function handleResetStats(msg) {
+  if (!dbReady || !statsManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
   const chatId = String(msg.chat.id);
   const admin = await isAdmin(msg.chat.id, msg.from.id);
   if (!admin) {
@@ -388,27 +422,40 @@ app.use((err, req, res, _next) => {
 });
 
 async function start() {
-  const mongoClient = new MongoClient(MONGODB_URI);
-  await mongoClient.connect();
-  const db = mongoClient.db('forex_bot');
-
-  statsManager = new StatsManager(db);
-  await statsManager.init();
-
-  liveTracker = new LiveTracker(db);
-  await liveTracker.init();
-
   const webhookBase = WEBHOOK_URL.replace(/\/bot.+$/i, '').replace(/\/$/, '');
   const finalWebhookUrl = `${webhookBase}/webhook`;
-  await bot.setWebHook(finalWebhookUrl);
 
   app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
-    console.log(`Webhook configured: ${finalWebhookUrl}`);
   });
+
+  await bot.setWebHook(finalWebhookUrl);
+  console.log(`Webhook configured: ${finalWebhookUrl}`);
+
+  const connectMongo = async () => {
+    try {
+      const mongoClient = new MongoClient(MONGODB_URI);
+      await mongoClient.connect();
+      const db = mongoClient.db('forex_bot');
+
+      statsManager = new StatsManager(db);
+      await statsManager.init();
+
+      liveTracker = new LiveTracker(db);
+      await liveTracker.init();
+
+      dbReady = true;
+      console.log('MongoDB connected.');
+    } catch (err) {
+      dbReady = false;
+      console.error('MongoDB connect failed, retrying in 10s:', err.message);
+      setTimeout(connectMongo, 10000);
+    }
+  };
+
+  connectMongo();
 }
 
 start().catch((err) => {
-  console.error('Fatal startup error:', err);
-  process.exit(1);
+  console.error('Startup error:', err);
 });
