@@ -14,7 +14,7 @@
   "dependencies": {
     "dotenv": "latest",
     "express": "latest",
-    "mongodb": "latest",
+    "mongodb": "^7.1.1",
     "node-telegram-bot-api": "latest"
   },
   "devDependencies": {
