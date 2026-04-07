@@ -431,7 +431,7 @@ async function start() {
   const webhookBase = WEBHOOK_URL.replace(/\/bot.+$/i, '').replace(/\/$/, '');
   const finalWebhookUrl = `${webhookBase}/webhook`;
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on port ${PORT}`);
   });
 
