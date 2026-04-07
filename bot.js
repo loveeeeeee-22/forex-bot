@@ -328,19 +328,19 @@ bot.on('edited_message', async (msg) => {
   }
 });
 
-app.post('/bot:token', async (req, res) => {
+app.post('/bot:token', (req, res) => {
   if (req.params.token !== BOT_TOKEN) {
     return res.sendStatus(403);
   }
 
-  try {
-    await bot.processUpdate(req.body);
-    return res.sendStatus(200);
-  } catch (err) {
-    // Return 200 to avoid Telegram retry loops on malformed updates.
-    console.error('Webhook process update error:', err);
-    return res.sendStatus(200);
-  }
+  // Acknowledge Telegram immediately to avoid webhook timeout/502 responses.
+  res.sendStatus(200);
+
+  Promise.resolve()
+    .then(() => bot.processUpdate(req.body))
+    .catch((err) => {
+      console.error('Webhook process update error:', err);
+    });
 });
 
 app.get('/', (_req, res) => {
