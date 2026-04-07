@@ -369,44 +369,50 @@ function enqueueUpdate(update) {
     });
 }
 
-function parseWebhookBody(req) {
+function parseUpdatePayload(payload) {
   try {
-    if (!req.body) return null;
-    if (Buffer.isBuffer(req.body)) {
-      const text = req.body.toString('utf8');
-      return text ? JSON.parse(text) : null;
-    }
-    if (typeof req.body === 'string') {
-      return req.body ? JSON.parse(req.body) : null;
-    }
-    if (typeof req.body === 'object') {
-      return req.body;
-    }
+    if (!payload) return null;
+    if (typeof payload === 'object') return payload;
+    if (typeof payload === 'string') return payload ? JSON.parse(payload) : null;
     return null;
   } catch (err) {
-    console.error('Failed parsing webhook body:', err.message);
+    console.error('Failed parsing webhook payload:', err.message);
     return null;
   }
 }
 
-app.post('/bot:token', express.raw({ type: '*/*' }), (req, res) => {
-  if (req.params.token !== BOT_TOKEN) {
+function handleWebhookRequest(req, res, validateToken = false) {
+  if (validateToken && req.params.token !== BOT_TOKEN) {
     return res.sendStatus(403);
   }
 
-  // Acknowledge Telegram immediately to avoid webhook timeout/502 responses.
-  res.sendStatus(200);
+  // Always acknowledge first.
+  res.status(200).end();
 
-  const update = parseWebhookBody(req);
-  if (update) enqueueUpdate(update);
+  let raw = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    raw += chunk;
+  });
+  req.on('end', () => {
+    const update = parseUpdatePayload(raw);
+    if (update) enqueueUpdate(update);
+  });
+  req.on('error', (err) => {
+    console.error('Webhook request stream error:', err.message);
+  });
+}
+
+app.post('/bot:token', (req, res) => {
+  if (req.params.token !== BOT_TOKEN) {
+    return res.sendStatus(403);
+  }
+  return handleWebhookRequest(req, res, true);
 });
 
 // Preferred stable webhook path (avoids token/path parsing edge cases).
-app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
-  res.sendStatus(200);
-
-  const update = parseWebhookBody(req);
-  if (update) enqueueUpdate(update);
+app.post('/webhook', (req, res) => {
+  return handleWebhookRequest(req, res, false);
 });
 
 app.get('/', (_req, res) => {
