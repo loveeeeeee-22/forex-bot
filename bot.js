@@ -328,6 +328,14 @@ bot.on('edited_message', async (msg) => {
   }
 });
 
+function enqueueUpdate(update) {
+  Promise.resolve()
+    .then(() => bot.processUpdate(update))
+    .catch((err) => {
+      console.error('Webhook process update error:', err);
+    });
+}
+
 app.post('/bot:token', (req, res) => {
   if (req.params.token !== BOT_TOKEN) {
     return res.sendStatus(403);
@@ -335,12 +343,13 @@ app.post('/bot:token', (req, res) => {
 
   // Acknowledge Telegram immediately to avoid webhook timeout/502 responses.
   res.sendStatus(200);
+  enqueueUpdate(req.body);
+});
 
-  Promise.resolve()
-    .then(() => bot.processUpdate(req.body))
-    .catch((err) => {
-      console.error('Webhook process update error:', err);
-    });
+// Preferred stable webhook path (avoids token/path parsing edge cases).
+app.post('/webhook', (req, res) => {
+  res.sendStatus(200);
+  enqueueUpdate(req.body);
 });
 
 app.get('/', (_req, res) => {
@@ -358,11 +367,13 @@ async function start() {
   liveTracker = new LiveTracker(db);
   await liveTracker.init();
 
-  await bot.setWebHook(WEBHOOK_URL);
+  const webhookBase = WEBHOOK_URL.replace(/\/bot.+$/i, '').replace(/\/$/, '');
+  const finalWebhookUrl = `${webhookBase}/webhook`;
+  await bot.setWebHook(finalWebhookUrl);
 
   app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
-    console.log(`Webhook configured: ${WEBHOOK_URL}`);
+    console.log(`Webhook configured: ${finalWebhookUrl}`);
   });
 }
 
