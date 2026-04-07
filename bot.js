@@ -27,7 +27,6 @@ if (!BOT_TOKEN || !MONGODB_URI || !WEBHOOK_URL) {
 }
 
 const app = express();
-app.use(express.json());
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
@@ -336,24 +335,56 @@ function enqueueUpdate(update) {
     });
 }
 
-app.post('/bot:token', (req, res) => {
+function parseWebhookBody(req) {
+  try {
+    if (!req.body) return null;
+    if (Buffer.isBuffer(req.body)) {
+      const text = req.body.toString('utf8');
+      return text ? JSON.parse(text) : null;
+    }
+    if (typeof req.body === 'string') {
+      return req.body ? JSON.parse(req.body) : null;
+    }
+    if (typeof req.body === 'object') {
+      return req.body;
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed parsing webhook body:', err.message);
+    return null;
+  }
+}
+
+app.post('/bot:token', express.raw({ type: '*/*' }), (req, res) => {
   if (req.params.token !== BOT_TOKEN) {
     return res.sendStatus(403);
   }
 
   // Acknowledge Telegram immediately to avoid webhook timeout/502 responses.
   res.sendStatus(200);
-  enqueueUpdate(req.body);
+
+  const update = parseWebhookBody(req);
+  if (update) enqueueUpdate(update);
 });
 
 // Preferred stable webhook path (avoids token/path parsing edge cases).
-app.post('/webhook', (req, res) => {
+app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
   res.sendStatus(200);
-  enqueueUpdate(req.body);
+
+  const update = parseWebhookBody(req);
+  if (update) enqueueUpdate(update);
 });
 
 app.get('/', (_req, res) => {
   res.status(200).send('Forex bot is running.');
+});
+
+app.use((err, req, res, _next) => {
+  console.error('Express error:', err.message);
+  if (req.path === '/webhook' || req.path.startsWith('/bot')) {
+    return res.sendStatus(200);
+  }
+  return res.sendStatus(500);
 });
 
 async function start() {
