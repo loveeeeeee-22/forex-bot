@@ -27,6 +27,7 @@ if (!BOT_TOKEN || !MONGODB_URI || !WEBHOOK_URL) {
 }
 
 const app = express();
+app.use(express.json());
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
@@ -389,6 +390,11 @@ function handleWebhookRequest(req, res, validateToken = false) {
   // Always acknowledge first.
   res.status(200).end();
 
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
+    enqueueUpdate(req.body);
+    return;
+  }
+
   let raw = '';
   req.setEncoding('utf8');
   req.on('data', (chunk) => {
@@ -402,6 +408,8 @@ function handleWebhookRequest(req, res, validateToken = false) {
     console.error('Webhook request stream error:', err.message);
   });
 }
+
+app.get('/health', (_req, res) => res.status(200).send('OK'));
 
 app.post('/bot:token', (req, res) => {
   if (req.params.token !== BOT_TOKEN) {
@@ -428,19 +436,31 @@ app.use((err, req, res, _next) => {
 });
 
 async function start() {
-  const webhookBase = WEBHOOK_URL.replace(/\/bot.+$/i, '').replace(/\/$/, '');
-  const finalWebhookUrl = `${webhookBase}/webhook`;
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on port ${PORT}`);
+  // 1. Start Express FIRST and wait for it to confirm listening
+  await new Promise((resolve) => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server listening on port ${PORT}`);
+      resolve();
+    });
   });
 
-  await bot.setWebHook(finalWebhookUrl);
-  console.log(`Webhook configured: ${finalWebhookUrl}`);
+  // 2. Set webhook after server is confirmed up
+  try {
+    const webhookBase = WEBHOOK_URL.replace(/\/+$/, '');
+    const finalWebhookUrl = `${webhookBase}/webhook`;
+    await bot.setWebHook(finalWebhookUrl, { drop_pending_updates: true });
+    console.log(`Webhook set: ${finalWebhookUrl}`);
+  } catch (err) {
+    console.error('Failed to set webhook:', err.message);
+  }
 
+  // 3. Connect MongoDB separately - don't block startup if it fails
   const connectMongo = async () => {
     try {
-      const mongoClient = new MongoClient(MONGODB_URI);
+      const mongoClient = new MongoClient(MONGODB_URI, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000
+      });
       await mongoClient.connect();
       const db = mongoClient.db('forex_bot');
 
@@ -451,10 +471,10 @@ async function start() {
       await liveTracker.init();
 
       dbReady = true;
-      console.log('MongoDB connected.');
+      console.log('MongoDB connected successfully');
     } catch (err) {
       dbReady = false;
-      console.error('MongoDB connect failed, retrying in 10s:', err.message);
+      console.error('MongoDB failed, retrying in 10s:', err.message);
       setTimeout(connectMongo, 10000);
     }
   };
