@@ -29,6 +29,11 @@ if (!BOT_TOKEN || !MONGODB_URI || !WEBHOOK_URL) {
 const app = express();
 app.use(express.json());
 
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - body keys: ${Object.keys(req.body || {}).join(', ')}`);
+  next();
+});
+
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 let statsManager;
@@ -364,6 +369,8 @@ bot.on('edited_message', async (msg) => {
 
 app.get('/health', (_req, res) => res.status(200).send('OK'));
 
+app.get('/ping', (_req, res) => res.status(200).json({ ok: true, time: new Date().toISOString() }));
+
 app.post('/webhook', (req, res) => {
   res.status(200).end();
   const update = req.body;
@@ -401,6 +408,9 @@ async function start() {
     await bot.deleteWebHook({ drop_pending_updates: true });
     await bot.setWebHook(finalWebhookUrl);
     console.log('Webhook set:', finalWebhookUrl);
+
+    const webhookInfo = await bot.getWebHookInfo();
+    console.log('Webhook info:', JSON.stringify(webhookInfo));
   } catch (err) {
     console.error('Failed to set webhook:', err.message);
   }
