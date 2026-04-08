@@ -362,65 +362,16 @@ bot.on('edited_message', async (msg) => {
   }
 });
 
-function enqueueUpdate(update) {
-  Promise.resolve()
-    .then(() => bot.processUpdate(update))
-    .catch((err) => {
-      console.error('Webhook process update error:', err);
-    });
-}
-
-function parseUpdatePayload(payload) {
-  try {
-    if (!payload) return null;
-    if (typeof payload === 'object') return payload;
-    if (typeof payload === 'string') return payload ? JSON.parse(payload) : null;
-    return null;
-  } catch (err) {
-    console.error('Failed parsing webhook payload:', err.message);
-    return null;
-  }
-}
-
-function handleWebhookRequest(req, res, validateToken = false) {
-  if (validateToken && req.params.token !== BOT_TOKEN) {
-    return res.sendStatus(403);
-  }
-
-  // Always acknowledge first.
-  res.status(200).end();
-
-  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
-    enqueueUpdate(req.body);
-    return;
-  }
-
-  let raw = '';
-  req.setEncoding('utf8');
-  req.on('data', (chunk) => {
-    raw += chunk;
-  });
-  req.on('end', () => {
-    const update = parseUpdatePayload(raw);
-    if (update) enqueueUpdate(update);
-  });
-  req.on('error', (err) => {
-    console.error('Webhook request stream error:', err.message);
-  });
-}
-
 app.get('/health', (_req, res) => res.status(200).send('OK'));
 
-app.post('/bot:token', (req, res) => {
-  if (req.params.token !== BOT_TOKEN) {
-    return res.sendStatus(403);
-  }
-  return handleWebhookRequest(req, res, true);
-});
-
-// Preferred stable webhook path (avoids token/path parsing edge cases).
 app.post('/webhook', (req, res) => {
-  return handleWebhookRequest(req, res, false);
+  res.status(200).end();
+  const update = req.body;
+  if (update) {
+    Promise.resolve()
+      .then(() => bot.processUpdate(update))
+      .catch((err) => console.error('Update error:', err.message));
+  }
 });
 
 app.get('/', (_req, res) => {
@@ -429,7 +380,7 @@ app.get('/', (_req, res) => {
 
 app.use((err, req, res, _next) => {
   console.error('Express error:', err.message);
-  if (req.path === '/webhook' || req.path.startsWith('/bot')) {
+  if (req.path === '/webhook') {
     return res.sendStatus(200);
   }
   return res.sendStatus(500);
@@ -446,10 +397,10 @@ async function start() {
 
   // 2. Set webhook after server is confirmed up
   try {
-    const webhookBase = WEBHOOK_URL.replace(/\/+$/, '');
-    const finalWebhookUrl = `${webhookBase}/webhook`;
-    await bot.setWebHook(finalWebhookUrl, { drop_pending_updates: true });
-    console.log(`Webhook set: ${finalWebhookUrl}`);
+    const finalWebhookUrl = WEBHOOK_URL.replace(/\/+$/, '') + '/webhook';
+    await bot.deleteWebHook({ drop_pending_updates: true });
+    await bot.setWebHook(finalWebhookUrl);
+    console.log('Webhook set:', finalWebhookUrl);
   } catch (err) {
     console.error('Failed to set webhook:', err.message);
   }
@@ -459,7 +410,9 @@ async function start() {
     try {
       const mongoClient = new MongoClient(MONGODB_URI, {
         serverSelectionTimeoutMS: 10000,
-        connectTimeoutMS: 10000
+        connectTimeoutMS: 10000,
+        tls: true,
+        tlsAllowInvalidCertificates: false
       });
       await mongoClient.connect();
       const db = mongoClient.db('forex_bot');
