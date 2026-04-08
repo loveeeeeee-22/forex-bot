@@ -41,7 +41,11 @@ let liveTracker;
 let dbReady = false;
 
 function isGroupChat(msg) {
-  return msg && msg.chat && ['group', 'supergroup'].includes(msg.chat.type);
+  return (
+    msg &&
+    msg.chat &&
+    ['group', 'supergroup', 'private'].includes(msg.chat.type)
+  );
 }
 
 function normalizeUser(msgUser) {
@@ -338,7 +342,14 @@ async function handleCommand(msg) {
 }
 
 bot.on('message', async (msg) => {
-  if (!msg || !isGroupChat(msg) || !msg.text) return;
+  console.log('[message] received:', JSON.stringify({
+    chatType: msg?.chat?.type,
+    chatId: msg?.chat?.id,
+    text: msg?.text?.substring(0, 50),
+    from: msg?.from?.username
+  }));
+
+  if (!msg || !msg.text) return;
 
   try {
     if (msg.text.startsWith('/')) {
@@ -356,11 +367,10 @@ bot.on('message', async (msg) => {
 });
 
 bot.on('edited_message', async (msg) => {
-  if (!msg || !isGroupChat(msg) || !msg.text) return;
-
+  console.log('[edited_message] received:', msg?.chat?.type);
+  if (!msg || !msg.text) return;
   try {
     if (msg.text.startsWith('/')) return;
-
     await handleSignalMessage(msg, true);
   } catch (err) {
     console.error('Edited message handling error:', err);
@@ -374,10 +384,15 @@ app.get('/ping', (_req, res) => res.status(200).json({ ok: true, time: new Date(
 app.post('/webhook', (req, res) => {
   res.status(200).end();
   const update = req.body;
+  console.log('[webhook] update received, type:',
+    update?.message ? 'message' :
+      update?.edited_message ? 'edited_message' :
+        Object.keys(update || {}).join(',')
+  );
   if (update) {
     Promise.resolve()
       .then(() => bot.processUpdate(update))
-      .catch((err) => console.error('Update error:', err.message));
+      .catch((err) => console.error('[webhook] processUpdate error:', err.message));
   }
 });
 
