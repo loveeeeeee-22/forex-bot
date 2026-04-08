@@ -31,19 +31,18 @@ class StatsManager {
     await this.users.updateOne(
       { chatId, userId },
       {
+        $set: {
+          username: normalized
+        },
         $setOnInsert: {
           chatId,
           userId,
-          username: normalized,
           totalDollars: 0,
           totalPips: 0,
           trades: 0,
           wins: 0,
           losses: 0,
           pairs: {}
-        },
-        $set: {
-          username: normalized
         }
       },
       { upsert: true }
