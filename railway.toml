@@ -5,5 +5,3 @@ builder = "NIXPACKS"
 startCommand = "node bot.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-healthcheckPath = "/health"
-healthcheckTimeout = 30

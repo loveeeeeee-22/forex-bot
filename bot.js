@@ -1,8 +1,5 @@
-require('dotenv').config();
-
-const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
-const { MongoClient } = require('mongodb');
+require('dotenv').config();
 
 const { parseSignal } = require('./src/signalParser');
 const { formatSignalHtml } = require('./src/signalFormatter');
@@ -15,30 +12,44 @@ const {
   formatUserStatsHtml,
   formatLeaderboardHtml
 } = require('./src/formatter');
+const { MongoClient } = require('mongodb');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MONGODB_URI = process.env.MONGODB_URI;
-const PORT = Number(process.env.PORT || 8080);
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
 
-if (!BOT_TOKEN || !MONGODB_URI || !WEBHOOK_URL) {
-  console.error('Missing required env vars: BOT_TOKEN, MONGODB_URI, WEBHOOK_URL');
+if (!BOT_TOKEN || !MONGODB_URI) {
+  console.error('Missing BOT_TOKEN or MONGODB_URI');
   process.exit(1);
 }
 
-const app = express();
-app.use(express.json());
-
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  next();
-});
-
-const bot = new TelegramBot(BOT_TOKEN, { polling: false });
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 let statsManager;
 let liveTracker;
 let dbReady = false;
+
+async function connectDB() {
+  try {
+    const client = new MongoClient(MONGODB_URI, {
+      serverSelectionTimeoutMS: 15000,
+      tls: true,
+      tlsAllowInvalidCertificates: true
+    });
+    await client.connect();
+    const db = client.db('forex_bot');
+    statsManager = new StatsManager(db);
+    await statsManager.init();
+    liveTracker = new LiveTracker(db);
+    await liveTracker.init();
+    dbReady = true;
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('MongoDB failed, retrying in 10s:', err.message);
+    setTimeout(connectDB, 10000);
+  }
+}
+
+connectDB();
 
 function isGroupChat(msg) {
   return (
@@ -341,26 +352,6 @@ async function handleCommand(msg) {
   }
 }
 
-app.get('/', (_req, res) => res.status(200).send('Forex bot is running.'));
-
-app.get('/health', (_req, res) => res.status(200).send('OK'));
-
-app.post('/webhook', (req, res) => {
-  res.status(200).json({ ok: true });
-  try {
-    const update = req.body;
-    if (update && typeof update === 'object') {
-      bot.processUpdate(update).catch((err) => {
-        console.error('[webhook] error:', err.message);
-      });
-    }
-  } catch (err) {
-    console.error('[webhook] sync error:', err.message);
-  }
-});
-
-app.get('/ping', (_req, res) => res.status(200).json({ ok: true, time: new Date().toISOString() }));
-
 bot.on('message', async (msg) => {
   console.log('[message] received:', JSON.stringify({
     chatType: msg?.chat?.type,
@@ -397,65 +388,8 @@ bot.on('edited_message', async (msg) => {
   }
 });
 
-app.use((err, req, res, _next) => {
-  console.error('[express] unhandled error:', err.message);
-  res.status(200).json({ ok: true });
+bot.on('polling_error', (err) => {
+  console.error('Polling error:', err.message);
 });
 
-async function start() {
-  // 1. Start Express FIRST and wait for it to confirm listening
-  await new Promise((resolve) => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server listening on port ${PORT}`);
-      resolve();
-    });
-  });
-
-  // 2. Set webhook after server is confirmed up
-  try {
-    const finalWebhookUrl = WEBHOOK_URL.replace(/\/+$/, '') + '/webhook';
-    await bot.deleteWebHook({ drop_pending_updates: true });
-    await bot.setWebHook(finalWebhookUrl);
-    console.log('Webhook set:', finalWebhookUrl);
-
-    const webhookInfo = await bot.getWebHookInfo();
-    console.log('Webhook info:', JSON.stringify(webhookInfo));
-  } catch (err) {
-    console.error('Failed to set webhook:', err.message);
-  }
-
-  // 3. Connect MongoDB separately - don't block startup if it fails
-  const connectMongo = async () => {
-    try {
-      const mongoClient = new MongoClient(MONGODB_URI, {
-        serverSelectionTimeoutMS: 15000,
-        connectTimeoutMS: 15000,
-        socketTimeoutMS: 30000,
-        tls: true,
-        tlsAllowInvalidCertificates: true,
-        tlsAllowInvalidHostnames: true
-      });
-      await mongoClient.connect();
-      const db = mongoClient.db('forex_bot');
-
-      statsManager = new StatsManager(db);
-      await statsManager.init();
-
-      liveTracker = new LiveTracker(db);
-      await liveTracker.init();
-
-      dbReady = true;
-      console.log('MongoDB connected successfully');
-    } catch (err) {
-      dbReady = false;
-      console.error('MongoDB failed, retrying in 10s:', err.message);
-      setTimeout(connectMongo, 10000);
-    }
-  };
-
-  connectMongo();
-}
-
-start().catch((err) => {
-  console.error('Startup error:', err);
-});
+console.log('ForexBot is running...');
