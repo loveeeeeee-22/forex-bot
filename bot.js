@@ -22,7 +22,8 @@ if (!BOT_TOKEN || !MONGODB_URI) {
   process.exit(1);
 }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// polling: false until webhook is cleared — avoids webhook + getUpdates clash
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 let statsManager;
 let liveTracker;
@@ -390,6 +391,22 @@ bot.on('edited_message', async (msg) => {
 
 bot.on('polling_error', (err) => {
   console.error('Polling error:', err.message);
+  if (String(err.message).includes('409')) {
+    console.error(
+      'Hint: only ONE process may poll this bot. Stop local runs, set Railway replicas to 1, and remove duplicate deploys.'
+    );
+  }
 });
 
-console.log('ForexBot is running...');
+async function startPollingAfterWebhookClear() {
+  try {
+    await bot.deleteWebHook({ drop_pending_updates: false });
+    console.log('Telegram webhook cleared (if it was set).');
+  } catch (err) {
+    console.error('deleteWebHook:', err.message);
+  }
+  bot.startPolling();
+  console.log('ForexBot is running (polling)...');
+}
+
+startPollingAfterWebhookClear();

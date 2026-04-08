@@ -3,15 +3,6 @@ function normalizeUsername(username, fallbackUserId) {
   return `user_${fallbackUserId}`;
 }
 
-function emptyPairStats() {
-  return {
-    dollars: 0,
-    pips: 0,
-    wins: 0,
-    losses: 0
-  };
-}
-
 class StatsManager {
   constructor(db) {
     this.db = db;
@@ -65,6 +56,8 @@ class StatsManager {
 
     const pairPath = `pairs.${tradeData.pair}`;
 
+    // Only $inc — do not $setOnInsert the same pair path (MongoDB forbids
+    // $setOnInsert on pairs.X with $inc on pairs.X.* in one update).
     await this.users.updateOne(
       { chatId, userId },
       {
@@ -78,9 +71,6 @@ class StatsManager {
           [`${pairPath}.pips`]: tradeData.pips || 0,
           [`${pairPath}.wins`]: tradeData.isWin ? 1 : 0,
           [`${pairPath}.losses`]: tradeData.isWin ? 0 : 1
-        },
-        $setOnInsert: {
-          [pairPath]: emptyPairStats()
         }
       }
     );
