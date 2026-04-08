@@ -27,6 +27,7 @@ if (!BOT_TOKEN || !MONGODB_URI || !WEBHOOK_URL) {
 }
 
 const app = express();
+// Must be first middleware so JSON bodies are parsed before route handlers
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -35,6 +36,18 @@ app.use((req, res, next) => {
 });
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
+
+function processUpdate(update) {
+  return new Promise((resolve) => {
+    try {
+      bot.processUpdate(update);
+      resolve();
+    } catch (err) {
+      console.error('[processUpdate] error:', err.message);
+      resolve();
+    }
+  });
+}
 
 let statsManager;
 let liveTracker;
@@ -382,17 +395,16 @@ app.get('/health', (_req, res) => res.status(200).send('OK'));
 app.get('/ping', (_req, res) => res.status(200).json({ ok: true, time: new Date().toISOString() }));
 
 app.post('/webhook', (req, res) => {
-  res.status(200).end();
-  const update = req.body;
-  console.log('[webhook] update received, type:',
-    update?.message ? 'message' :
-      update?.edited_message ? 'edited_message' :
-        Object.keys(update || {}).join(',')
-  );
-  if (update) {
-    Promise.resolve()
-      .then(() => bot.processUpdate(update))
-      .catch((err) => console.error('[webhook] processUpdate error:', err.message));
+  // Respond immediately - never let this throw
+  res.status(200).json({ ok: true });
+
+  try {
+    const update = req.body;
+    if (update && typeof update === 'object') {
+      processUpdate(update).catch((err) => console.error(err.message));
+    }
+  } catch (err) {
+    console.error('[webhook] sync error:', err.message);
   }
 });
 
@@ -401,11 +413,8 @@ app.get('/', (_req, res) => {
 });
 
 app.use((err, req, res, _next) => {
-  console.error('Express error:', err.message);
-  if (req.path === '/webhook') {
-    return res.sendStatus(200);
-  }
-  return res.sendStatus(500);
+  console.error('[express] unhandled error:', err.message);
+  res.status(200).json({ ok: true });
 });
 
 async function start() {
