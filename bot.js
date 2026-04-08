@@ -18,7 +18,7 @@ const {
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MONGODB_URI = process.env.MONGODB_URI;
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 8080);
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 
 if (!BOT_TOKEN || !MONGODB_URI || !WEBHOOK_URL) {
