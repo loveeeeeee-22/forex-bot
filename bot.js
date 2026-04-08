@@ -409,10 +409,12 @@ async function start() {
   const connectMongo = async () => {
     try {
       const mongoClient = new MongoClient(MONGODB_URI, {
-        serverSelectionTimeoutMS: 10000,
-        connectTimeoutMS: 10000,
+        serverSelectionTimeoutMS: 15000,
+        connectTimeoutMS: 15000,
+        socketTimeoutMS: 30000,
         tls: true,
-        tlsAllowInvalidCertificates: false
+        tlsAllowInvalidCertificates: true,
+        tlsAllowInvalidHostnames: true
       });
       await mongoClient.connect();
       const db = mongoClient.db('forex_bot');
