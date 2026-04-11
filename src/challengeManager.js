@@ -112,7 +112,7 @@ class ChallengeManager {
     const res = await this.challenges.updateOne(
       { chatId, userId, currentBalance: { $gte: amount } },
       {
-        $inc: { currentBalance: -amount, totalWithdrawn: amount },
+        $inc: { currentBalance: -amount },
         $set: { updatedAt: now }
       }
     );
@@ -127,20 +127,10 @@ class ChallengeManager {
     }
 
     const doc = await this.challenges.findOne({ chatId, userId });
-    await this.challengeTrades.insertOne({
-      kind: 'withdrawal',
-      chatId,
-      userId,
-      username: doc.username,
-      accountUsername: (doc.accountUsername || '').trim(),
-      withdrawalAmount: amount,
-      timestamp: now
-    });
 
     return {
       withdrawn: amount,
-      newBalance: doc.currentBalance,
-      totalWithdrawn: doc.totalWithdrawn || 0
+      newBalance: doc.currentBalance
     };
   }
 

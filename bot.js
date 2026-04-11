@@ -573,14 +573,14 @@ async function handleWithdrawChallenge(msg) {
   const me = normalizeUser(msg.from);
 
   try {
-    const { withdrawn, newBalance, totalWithdrawn } = await challengeManager.recordChallengeWithdrawal(
+    const { withdrawn, newBalance } = await challengeManager.recordChallengeWithdrawal(
       chatId,
       me.userId,
       parsed.amount
     );
     await safeSend(
       msg.chat.id,
-      `🏆 Withdrew <b>$${withdrawn.toFixed(2)}</b> from your challenge account.\n💵 New balance: <b>$${newBalance.toFixed(2)}</b>\n💸 Total withdrawn (lifetime): <b>$${totalWithdrawn.toFixed(2)}</b>`,
+      `🏆 Withdrew <b>$${withdrawn.toFixed(2)}</b> from your challenge account.\n💵 New balance: <b>$${newBalance.toFixed(2)}</b>`,
       { reply_to_message_id: msg.message_id }
     );
   } catch (err) {
