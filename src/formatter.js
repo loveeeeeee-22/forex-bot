@@ -118,6 +118,7 @@ function formatChallengeStatsHtml(doc) {
     `📊 Account: <b>${escapeHtml(doc.accountUsername || '')}</b>`,
     `💰 Starting Balance: <b>${formatPlainMoney(start)}</b>`,
     `💵 Current Balance: <b>${formatPlainMoney(current)}</b>`,
+    `💸 Total Withdrawn (lifetime): <b>${formatPlainMoney(doc.totalWithdrawn || 0)}</b>`,
     `📈 Gain/Loss: <b>${formatSignedMoney(gain)} (${formatSignedPercent(pctNum)})</b>`,
     `🎯 Total Pips: <b>${pipsSign}${Math.abs(totalPips).toFixed(1)}</b>`,
     `✅ Wins: <b>${wins}</b>`,

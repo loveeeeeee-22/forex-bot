@@ -472,7 +472,8 @@ async function handleChallengeHelp(msg) {
     '<code>/challengestats</code> — your challenge stats',
     '<code>/challengestats @username</code> — challenge stats for a member',
     '<code>/challengeleaderboard</code> — % gain leaderboard for this chat',
-    '<code>/cancelchallenge</code> — end your challenge and wipe its data in this chat'
+    '<code>/cancelchallenge</code> — end your challenge and wipe its data in this chat',
+    '<code>/withdraw &lt;amount&gt;</code> — take profits from your challenge balance (e.g. <code>/withdraw 250</code>)'
   ].join('\n');
 
   await safeSend(msg.chat.id, text, { reply_to_message_id: msg.message_id });
@@ -529,6 +530,66 @@ async function handleChallengeLeaderboard(msg) {
   await safeSend(msg.chat.id, html, { reply_to_message_id: msg.message_id });
 }
 
+function parseWithdrawAmount(text) {
+  const m = (text || '').trim().match(/^\/withdraw(?:@\w+)?\s+(.+)$/i);
+  if (!m) return null;
+  const tail = m[1].trim();
+  const num = tail.match(/^\$?\s*([0-9]+(?:[.,][0-9]+)?)/);
+  if (!num) return { error: 'parse' };
+  const amount = Number(num[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return { error: 'invalid' };
+  return { amount };
+}
+
+async function handleWithdrawChallenge(msg) {
+  if (!dbReady || !challengeManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
+
+  const text = (msg.text || '').trim();
+  if (/^\/withdraw(?:@\w+)?$/i.test(text)) {
+    await safeSend(
+      msg.chat.id,
+      'Usage: <code>/withdraw &lt;amount&gt;</code> — challenge only, e.g. <code>/withdraw 250</code> or <code>/withdraw $1,250.50</code>',
+      { reply_to_message_id: msg.message_id }
+    );
+    return;
+  }
+
+  const parsed = parseWithdrawAmount(text);
+  if (!parsed || parsed.error) {
+    await safeSend(
+      msg.chat.id,
+      'Could not read an amount. Use e.g. <code>/withdraw 250</code> or <code>/withdraw $500</code> (challenge account only).',
+      { reply_to_message_id: msg.message_id }
+    );
+    return;
+  }
+
+  const chatId = String(msg.chat.id);
+  const me = normalizeUser(msg.from);
+
+  try {
+    const { withdrawn, newBalance, totalWithdrawn } = await challengeManager.recordChallengeWithdrawal(
+      chatId,
+      me.userId,
+      parsed.amount
+    );
+    await safeSend(
+      msg.chat.id,
+      `🏆 Withdrew <b>$${withdrawn.toFixed(2)}</b> from your challenge account.\n💵 New balance: <b>$${newBalance.toFixed(2)}</b>\n💸 Total withdrawn (lifetime): <b>$${totalWithdrawn.toFixed(2)}</b>`,
+      { reply_to_message_id: msg.message_id }
+    );
+  } catch (err) {
+    await safeSend(msg.chat.id, escapeHtml(err.message), {
+      reply_to_message_id: msg.message_id
+    });
+  }
+}
+
 async function handleCancelChallenge(msg) {
   if (!dbReady || !challengeManager) {
     await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
@@ -573,6 +634,7 @@ async function handleHelp(msg) {
     '<code>/challengestats @username</code> - Challenge stats for a member',
     '<code>/challengeleaderboard</code> - Challenge % gain leaderboard',
     '<code>/cancelchallenge</code> - End your challenge and remove its data in this chat',
+    '<code>/withdraw &lt;amount&gt;</code> - Withdraw from challenge balance only (e.g. /withdraw 250)',
     '<code>CHALLENGE REGISTER</code> - Sign up (multi-line format in <code>/challenge</code>)',
     '<code>/help</code> - Show this help'
   ].join('\n');
@@ -590,6 +652,7 @@ async function handleCommand(msg) {
     if (/^\/challengestats(?:@\w+)?\b/i.test(text)) return handleChallengeStats(msg);
     if (/^\/challengeleaderboard(?:@\w+)?$/i.test(text)) return handleChallengeLeaderboard(msg);
     if (/^\/cancelchallenge(?:@\w+)?$/i.test(text)) return handleCancelChallenge(msg);
+    if (/^\/withdraw(?:@\w+)?(?:\s|$)/i.test(text)) return handleWithdrawChallenge(msg);
     if (/^\/leaderboard(?:@\w+)?(?:\s+\w+)?$/i.test(text)) return handleLeaderboard(msg);
     if (/^\/canceltrade(?:@\w+)?\b/i.test(text)) return handleCancelTrade(msg);
     if (/^\/resetstats(?:@\w+)?\b/i.test(text)) return handleResetStats(msg);

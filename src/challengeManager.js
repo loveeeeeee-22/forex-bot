@@ -103,6 +103,47 @@ class ChallengeManager {
     return trade;
   }
 
+  async recordChallengeWithdrawal(chatId, userId, amount) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error('Withdrawal amount must be a positive number.');
+    }
+
+    const now = Date.now();
+    const res = await this.challenges.updateOne(
+      { chatId, userId, currentBalance: { $gte: amount } },
+      {
+        $inc: { currentBalance: -amount, totalWithdrawn: amount },
+        $set: { updatedAt: now }
+      }
+    );
+
+    if (res.matchedCount === 0) {
+      const doc = await this.challenges.findOne({ chatId, userId });
+      if (!doc) {
+        throw new Error('No challenge registration for you in this chat. See /challenge to register.');
+      }
+      const bal = doc.currentBalance ?? doc.startingBalance ?? 0;
+      throw new Error(`Insufficient balance. Current balance is $${bal.toFixed(2)}.`);
+    }
+
+    const doc = await this.challenges.findOne({ chatId, userId });
+    await this.challengeTrades.insertOne({
+      kind: 'withdrawal',
+      chatId,
+      userId,
+      username: doc.username,
+      accountUsername: (doc.accountUsername || '').trim(),
+      withdrawalAmount: amount,
+      timestamp: now
+    });
+
+    return {
+      withdrawn: amount,
+      newBalance: doc.currentBalance,
+      totalWithdrawn: doc.totalWithdrawn || 0
+    };
+  }
+
   async getChallengeStats(chatId, userId) {
     return this.challenges.findOne({ chatId, userId });
   }
