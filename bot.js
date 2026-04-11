@@ -460,6 +460,8 @@ async function handleChallengeHelp(msg) {
   const text = [
     '🏆 <b>Challenge track</b>',
     '━━━━━━━━━━━━━━━━━━━━',
+    'You can have <b>one active challenge</b> per chat. To change account or start over, use <code>/cancelchallenge</code> first, then register again.',
+    '',
     'Register with a message in this shape:',
     '<pre>CHALLENGE REGISTER',
     'Account: YourAccountName',
@@ -469,7 +471,8 @@ async function handleChallengeHelp(msg) {
     '',
     '<code>/challengestats</code> — your challenge stats',
     '<code>/challengestats @username</code> — challenge stats for a member',
-    '<code>/challengeleaderboard</code> — % gain leaderboard for this chat'
+    '<code>/challengeleaderboard</code> — % gain leaderboard for this chat',
+    '<code>/cancelchallenge</code> — end your challenge and wipe its data in this chat'
   ].join('\n');
 
   await safeSend(msg.chat.id, text, { reply_to_message_id: msg.message_id });
@@ -526,6 +529,31 @@ async function handleChallengeLeaderboard(msg) {
   await safeSend(msg.chat.id, html, { reply_to_message_id: msg.message_id });
 }
 
+async function handleCancelChallenge(msg) {
+  if (!dbReady || !challengeManager) {
+    await safeSend(msg.chat.id, 'Database is still connecting. Try again in a moment.', {
+      reply_to_message_id: msg.message_id
+    });
+    return;
+  }
+  const chatId = String(msg.chat.id);
+  const me = normalizeUser(msg.from);
+  const { removed } = await challengeManager.cancelChallenge(chatId, me.userId);
+  if (!removed) {
+    await safeSend(
+      msg.chat.id,
+      'You do not have an active challenge in this chat. Use <code>CHALLENGE REGISTER</code> to join (see <code>/challenge</code>).',
+      { reply_to_message_id: msg.message_id }
+    );
+    return;
+  }
+  await safeSend(
+    msg.chat.id,
+    '🏆 Your challenge in this chat has ended. All challenge trades and open entries were removed. You can register again with <code>CHALLENGE REGISTER</code> when you are ready.',
+    { reply_to_message_id: msg.message_id }
+  );
+}
+
 async function handleHelp(msg) {
   const help = [
     '📘 <b>Forex Bot Commands</b>',
@@ -544,6 +572,7 @@ async function handleHelp(msg) {
     '<code>/challengestats</code> - Your challenge stats',
     '<code>/challengestats @username</code> - Challenge stats for a member',
     '<code>/challengeleaderboard</code> - Challenge % gain leaderboard',
+    '<code>/cancelchallenge</code> - End your challenge and remove its data in this chat',
     '<code>CHALLENGE REGISTER</code> - Sign up (multi-line format in <code>/challenge</code>)',
     '<code>/help</code> - Show this help'
   ].join('\n');
@@ -560,6 +589,7 @@ async function handleCommand(msg) {
     if (/^\/challenge(?:@\w+)?$/i.test(text)) return handleChallengeHelp(msg);
     if (/^\/challengestats(?:@\w+)?\b/i.test(text)) return handleChallengeStats(msg);
     if (/^\/challengeleaderboard(?:@\w+)?$/i.test(text)) return handleChallengeLeaderboard(msg);
+    if (/^\/cancelchallenge(?:@\w+)?$/i.test(text)) return handleCancelChallenge(msg);
     if (/^\/leaderboard(?:@\w+)?(?:\s+\w+)?$/i.test(text)) return handleLeaderboard(msg);
     if (/^\/canceltrade(?:@\w+)?\b/i.test(text)) return handleCancelTrade(msg);
     if (/^\/resetstats(?:@\w+)?\b/i.test(text)) return handleResetStats(msg);

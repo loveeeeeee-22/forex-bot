@@ -29,6 +29,13 @@ class ChallengeManager {
       throw new Error('Invalid starting balance');
     }
 
+    const existing = await this.challenges.findOne({ chatId, userId });
+    if (existing) {
+      throw new Error(
+        'Already registered for the challenge in this chat. Use /cancelchallenge to end your current challenge first.'
+      );
+    }
+
     await this.challenges.updateOne(
       { chatId, userId },
       {
@@ -51,6 +58,13 @@ class ChallengeManager {
       },
       { upsert: true }
     );
+  }
+
+  async cancelChallenge(chatId, userId) {
+    await this.challengeTrades.deleteMany({ chatId, userId });
+    await this.openChallengeTrades.deleteMany({ chatId, userId });
+    const res = await this.challenges.deleteOne({ chatId, userId });
+    return { removed: res.deletedCount === 1 };
   }
 
   async recordChallengeTrade(chatId, userId, username, accountUsername, pair, dollars, pips, isWin) {
