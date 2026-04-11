@@ -6,10 +6,11 @@ function fmt(value) {
 
 function formatSignalHtml(signal, options = {}) {
   const header = options.isUpdate ? '✏️ <b>Signal updated:</b>\n\n' : '';
+  const challengeBanner = options.isChallenge ? '🏆 <b>CHALLENGE SIGNAL</b>\n' : '';
   const dirEmoji = signal.direction === 'BUY' ? '🟢' : '🔴';
 
   const lines = [
-    `${header}🥇 <b>${signal.pair}</b>  ${dirEmoji} <b>${signal.direction}</b>`,
+    `${header}${challengeBanner}🥇 <b>${signal.pair}</b>  ${dirEmoji} <b>${signal.direction}</b>`,
     '━━━━━━━━━━━━━━━━━━━━'
   ];
 

@@ -11,20 +11,22 @@ function detectPair(text) {
 }
 
 function parsePnlMessage(text) {
-  const upper = (text || '').toUpperCase();
+  const raw = text || '';
+  const upper = raw.toUpperCase();
+  const isChallengeResult = /\bchallenge\b/i.test(raw);
 
   const sideMatch = upper.match(/\b(TP|SL)\b/i);
-  const dollarsMatch = upper.match(/\$\s*([0-9]+(?:[.,][0-9]+)?)/i);
+  const dollarsMatch = upper.match(/\+?\s*\$\s*([0-9]+(?:[.,][0-9]+)?)/i);
   const pipsMatch = upper.match(/([+\-]?\d+(?:[.,]\d+)?)\s*PIPS?\b/i);
   const pair = detectPair(upper);
 
   if (!sideMatch || !dollarsMatch || !pair) {
-    return { isResult: false };
+    return { isResult: false, isChallengeResult };
   }
 
   const side = sideMatch[1].toUpperCase();
   const dollarsAbs = Number(dollarsMatch[1].replace(/,/g, ''));
-  if (!Number.isFinite(dollarsAbs)) return { isResult: false };
+  if (!Number.isFinite(dollarsAbs)) return { isResult: false, isChallengeResult };
 
   const isWin = side === 'TP';
   const dollars = isWin ? Math.abs(dollarsAbs) : -Math.abs(dollarsAbs);
@@ -39,6 +41,7 @@ function parsePnlMessage(text) {
 
   return {
     isResult: true,
+    isChallengeResult,
     pair,
     isWin,
     dollars,

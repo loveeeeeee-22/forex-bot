@@ -79,9 +79,11 @@ function parseSignal(text) {
   const hasSignalCore = Boolean(pair && direction);
   const hasPriceTarget = [entry, tp1, tp2, tp3, sl].some((v) => v !== null);
   const isSignal = hasSignalCore && hasPriceTarget;
+  const isChallengeSignal = /\bchallenge\b/i.test(raw);
 
   return {
     isSignal,
+    isChallengeSignal,
     pair,
     direction,
     entry,
